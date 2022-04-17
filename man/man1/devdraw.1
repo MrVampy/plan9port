@@ -9,7 +9,7 @@ invoked via
 .SH DESCRIPTION
 .I Devdraw
 serves a custom graphics protocol and is the only program
-that talks directly to X window servers.
+that talks directly to host OS window servers.
 .PP
 .SS "Apple macOS
 .PP
@@ -36,6 +36,13 @@ Typing Command-F toggles full screen mode.
 .I Devdraw
 automatically detects high-resolution (retina) displays.
 For debugging, typing Command-R toggles retina mode.
+On macOS, setting
+.BI devdrawretina
+to
+.BI 1
+will cause
+.I devdraw
+to use all available physical pixels on a retina display.
 .PP
 Other than the special cases mentioned above,
 holding down Command while typing a character
@@ -68,6 +75,12 @@ there is no way to type
 variants,
 so there is no access to keyboard shortcuts for
 undo, redo, cut, and paste.
+.SS "Wayland
+.PP
+On Linux with native Wayland support, mouse button 1 on the frame will
+allow dragging to resize, and button 2 will allow for moving the frame.
+The chording, scroll-wheel, and modifier-key behavior is otherwise
+identical to the X Windows case described above.
 .SH SOURCE
 .B \*9/src/cmd/devdraw
 .SH "SEE ALSO
