@@ -536,7 +536,7 @@ char *
 rpc_getsnarf(void)
 {
 	char *out = NULL;
-	int ret;
+	int ret = 0;
 	struct wl_display *d = procState.wl_display;
 	struct wl_callback *cb = wl_display_sync(d);
 	wl_callback_add_listener(cb, &getsnarf_listener, &out);
@@ -636,7 +636,7 @@ rpc_putsnarf(char *data)
 		.len = strlen(data),
 		.data = data,
 	};
-	int ret;
+	int ret = 0;
 	struct wl_display *d = procState.wl_display;
 	struct wl_callback *cb = wl_display_sync(d);
 	wl_callback_add_listener(cb, &putsnarf_listener, &c);
@@ -716,6 +716,7 @@ rpc_flush(Client *c, Rectangle r)
 	if (w->resizing == 1)
 		return;
 	done = 0;
+	ret = 0;
 	scale = (w->scale > 1) ? 2 : 1;
 	i = c->screenimage;
 	t = i->X;
