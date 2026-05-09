@@ -289,28 +289,19 @@ xdg_toplevel_configure(void *opaque, struct xdg_toplevel *t, int32_t wd, int32_t
 
 	c = opaque;
 	w = (void *)c->view;
+	if (wd != 0 && ht != 0) {
+		w->wantsize.x = wd;
+		w->wantsize.y = ht;
+	}
 	wl_array_for_each(s, states)
 	{
-		// TODO: use this to toggle drawing decorations
 		switch (*s) {
-		case XDG_TOPLEVEL_STATE_ACTIVATED:
-			break;
 		case XDG_TOPLEVEL_STATE_FULLSCREEN:
 		case XDG_TOPLEVEL_STATE_MAXIMIZED:
 			w->bounds.x = wd;
 			w->bounds.y = ht;
-		case XDG_TOPLEVEL_STATE_RESIZING:
-			// w->resizing = 1;
-			w->wantsize.x = wd;
-			w->wantsize.y = ht;
 			break;
-		case XDG_TOPLEVEL_STATE_TILED_TOP:
-			break;
-		case XDG_TOPLEVEL_STATE_TILED_BOTTOM:
-			break;
-		case XDG_TOPLEVEL_STATE_TILED_LEFT:
-			break;
-		case XDG_TOPLEVEL_STATE_TILED_RIGHT:
+		default:
 			break;
 		}
 	};
