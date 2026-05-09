@@ -929,6 +929,19 @@ setupwindow(Client *c, Globals *g)
 	}
 	setscale(c, &g->output_list);
 	setupdecoration(w);
+
+	// xdg-shell requires an initial commit (with no buffer attached) on
+	// the role-bearing wl_surface to receive the first configure event,
+	// which the client must then ack_configure before any buffer can be
+	// attached. Without this, the first buffer attach -- whether from the
+	// updatedecoration call below the syncpoint in rpc_attach, or from
+	// any subsurface commit that propagates state to the parent -- triggers
+	// xdg_surface protocol error 3 ("must ack the initial configure before
+	// attaching buffer"). The xdg_surface_configure callback above is
+	// already wired to ack on entry; the missing piece is just triggering
+	// the round-trip.
+	wl_surface_commit(w->wl_surface);
+
 	return w;
 };
 
