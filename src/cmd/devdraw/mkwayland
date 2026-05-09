@@ -1,4 +1,4 @@
-way_proto=/usr/share/wayland-protocols
+way_proto=`pkg-config --variable=pkgdatadir wayland-protocols 2>/dev/null || echo /usr/share/wayland-protocols`
 
 xdg-shell-protocol.c: $way_proto/stable/xdg-shell/xdg-shell.xml
 	wayland-scanner private-code < $prereq > $target
