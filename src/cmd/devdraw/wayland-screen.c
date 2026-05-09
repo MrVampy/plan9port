@@ -119,8 +119,8 @@ gfx_main(void)
 	memset(g->snarf_buf, 0x00, 4096);
 
 	gfx_started();
-	while (wl_display_dispatch(g->wl_display)) {
-	}
+	while (wl_display_dispatch(g->wl_display) > 0)
+		;
 err:
 	sysfatal("%r");
 }
@@ -690,11 +690,8 @@ rpc_setlabel(Client *c, char *label)
 static void
 flush_release(void *opaque, struct wl_buffer *buf)
 {
-	int *done;
-
-	done = opaque;
+	(void)opaque;
 	wl_buffer_destroy(buf);
-	*done = 1;
 }
 
 const struct wl_buffer_listener flush_listener = {
@@ -710,13 +707,11 @@ rpc_flush(Client *c, Rectangle r)
 	struct wl_shm_pool *pool;
 	struct wl_buffer *buf;
 	ptrdiff_t off;
-	int x, y, scale, done, ret;
+	int x, y, scale;
 
 	w = (void *)c->view;
 	if (w->resizing == 1)
 		return;
-	done = 0;
-	ret = 0;
 	scale = (w->scale > 1) ? 2 : 1;
 	i = c->screenimage;
 	t = i->X;
@@ -727,15 +722,12 @@ rpc_flush(Client *c, Rectangle r)
 	assert(y > 0 && x > 0);
 	buf = wl_shm_pool_create_buffer(pool, off, x, y, i->width * scale * sizeof(uint32), WL_SHM_FORMAT_XRGB8888);
 	wl_shm_pool_destroy(pool);
-	wl_buffer_add_listener(buf, &flush_listener, &done);
+	wl_buffer_add_listener(buf, &flush_listener, nil);
 	wl_surface_attach(w->wl_surface, buf, 0, 0);
 	wl_surface_set_buffer_scale(w->wl_surface, scale);
 	wl_surface_damage_buffer(w->wl_surface, r.min.x * scale, r.min.y * scale, Dx(r) * scale, Dy(r) * scale);
-	// We get border updates "for free" because they're synced with the parent
-	// surface.
 	wl_surface_commit(w->wl_surface);
-	while (done == 0 && ret >= 0)
-		ret = wl_display_flush(w->global->wl_display);
+	wl_display_flush(w->global->wl_display);
 }
 
 void
@@ -902,8 +894,10 @@ setupwindow(Client *c, Globals *g)
 	for (int i = 0; i < 4; i++) {
 		w->decoration.edge[i].surface = wl_compositor_create_surface(g->wl_compositor);
 	}
-	w->wl_pointer = wl_seat_get_pointer(g->wl_seat);
-	w->wl_keyboard = wl_seat_get_keyboard(g->wl_seat);
+	w->wl_pointer = (g->seat_capabilities & WL_SEAT_CAPABILITY_POINTER)
+		? wl_seat_get_pointer(g->wl_seat) : nil;
+	w->wl_keyboard = (g->seat_capabilities & WL_SEAT_CAPABILITY_KEYBOARD)
+		? wl_seat_get_keyboard(g->wl_seat) : nil;
 	w->cursor.surface = wl_compositor_create_surface(g->wl_compositor);
 	fd = allocate_shm_file(curBufSz);
 	w->cursor.pool = wl_shm_create_pool(w->global->wl_shm, fd, curBufSz);
@@ -930,19 +924,8 @@ setupwindow(Client *c, Globals *g)
 	}
 	setscale(c, &g->output_list);
 	setupdecoration(w);
-
-	// xdg-shell requires an initial commit (with no buffer attached) on
-	// the role-bearing wl_surface to receive the first configure event,
-	// which the client must then ack_configure before any buffer can be
-	// attached. Without this, the first buffer attach -- whether from the
-	// updatedecoration call below the syncpoint in rpc_attach, or from
-	// any subsurface commit that propagates state to the parent -- triggers
-	// xdg_surface protocol error 3 ("must ack the initial configure before
-	// attaching buffer"). The xdg_surface_configure callback above is
-	// already wired to ack on entry; the missing piece is just triggering
-	// the round-trip.
+	// xdg-shell: initial commit (no buffer) to trigger first configure.
 	wl_surface_commit(w->wl_surface);
-
 	return w;
 };
 
@@ -989,8 +972,10 @@ rpc_attach(Client *client, char *label, char *winsize)
 	w = setupwindow(client, g);
 	if (w == nil)
 		sysfatal("unable to allocate new window");
-	wl_pointer_add_listener(w->wl_pointer, &wl_pointer_listener, client);
-	wl_keyboard_add_listener(w->wl_keyboard, &wl_keyboard_listener, client);
+	if (w->wl_pointer != nil)
+		wl_pointer_add_listener(w->wl_pointer, &wl_pointer_listener, client);
+	if (w->wl_keyboard != nil)
+		wl_keyboard_add_listener(w->wl_keyboard, &wl_keyboard_listener, client);
 	syncpoint(w->global->wl_display);
 	if (w->cursize.x != 0 && w->cursize.y != 0)
 		// May have had bounds suggested by callbacks run during the syncpoint.
