@@ -60,7 +60,7 @@ static ClientImpl wlImpl = {
 static void
 setupdecoration(window *w);
 static window *
-setupwindow(Client *c, Globals *g);
+setupwindow(Client *c, Globals *g, char *label);
 static void
 updatedecoration(window *w, Rectangle r);
 
@@ -854,17 +854,20 @@ static char *
 guessappid(void)
 {
 	int ppid;
-	char buf[64], *base;
+	char path[64], buf[4096], *base;
 	int fd;
+	int n;
 
 	ppid = getppid();
-	snprint(buf, 64, "/proc/%d/cmdline", ppid);
-	fd = open(buf, OREAD);
+	snprint(path, sizeof path, "/proc/%d/cmdline", ppid);
+	fd = open(path, OREAD);
 	if (fd == -1)
 		return nil;
-	read(fd, buf, 64);
+	n = read(fd, buf, sizeof(buf)-1);
 	close(fd);
-	buf[63] = 0x00;
+	if (n <= 0)
+		return nil;
+	buf[n] = 0x00;
 	// argv[0] from /proc/<pid>/cmdline is whatever the launcher used,
 	// often a full path like /nix/store/<hash>-.../bin/acme. Compositor
 	// window-rules match on the app_id basename ("acme"), not the full
@@ -874,7 +877,7 @@ guessappid(void)
 }
 
 static window *
-setupwindow(Client *c, Globals *g)
+setupwindow(Client *c, Globals *g, char *label)
 {
 	window *w;
 	char *app_id;
@@ -891,7 +894,10 @@ setupwindow(Client *c, Globals *g)
 		werrstr("unable to allocate new xkb_context");
 		return nil;
 	}
-	app_id = guessappid();
+	if (label != nil && label[0] != 0)
+		app_id = strdup(label);
+	else
+		app_id = guessappid();
 	w->wl_surface = wl_compositor_create_surface(g->wl_compositor);
 	w->xdg_surface = xdg_wm_base_get_xdg_surface(g->xdg_wm_base, w->wl_surface);
 	w->xdg_toplevel = xdg_surface_get_toplevel(w->xdg_surface);
@@ -909,11 +915,10 @@ setupwindow(Client *c, Globals *g)
 	wl_surface_add_listener(w->wl_surface, &wl_surface_listener, c);
 	xdg_surface_add_listener(w->xdg_surface, &xdg_surface_listener, c);
 	xdg_toplevel_add_listener(w->xdg_toplevel, &xdg_toplevel_listener, c);
-	xdg_toplevel_set_title(w->xdg_toplevel, "devdraw");
+	xdg_toplevel_set_title(w->xdg_toplevel, app_id == nil ? "devdraw" : app_id);
 	if (app_id == nil)
 		xdg_toplevel_set_app_id(w->xdg_toplevel, "devdraw");
 	else {
-		fprint(2, "app_id: %s\n", app_id);
 		xdg_toplevel_set_app_id(w->xdg_toplevel, app_id);
 		free(app_id);
 	}
@@ -971,7 +976,7 @@ rpc_attach(Client *client, char *label, char *winsize)
 		if (parsewinsize(winsize, &r, &havemin) < 0)
 			sysfatal("%r");
 	g = &procState;
-	w = setupwindow(client, g);
+	w = setupwindow(client, g, label);
 	if (w == nil)
 		sysfatal("unable to allocate new window");
 	wl_pointer_add_listener(w->wl_pointer, &wl_pointer_listener, client);
