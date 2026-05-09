@@ -855,7 +855,7 @@ static char *
 guessappid(void)
 {
 	int ppid;
-	char buf[64];
+	char buf[64], *base;
 	int fd;
 
 	ppid = getppid();
@@ -866,7 +866,12 @@ guessappid(void)
 	read(fd, buf, 64);
 	close(fd);
 	buf[63] = 0x00;
-	return strdup(buf);
+	// argv[0] from /proc/<pid>/cmdline is whatever the launcher used,
+	// often a full path like /nix/store/<hash>-.../bin/acme. Compositor
+	// window-rules match on the app_id basename ("acme"), not the full
+	// path, so strip everything up to the last '/'.
+	base = strrchr(buf, '/');
+	return strdup(base ? base + 1 : buf);
 }
 
 static window *
@@ -894,10 +899,8 @@ setupwindow(Client *c, Globals *g)
 	for (int i = 0; i < 4; i++) {
 		w->decoration.edge[i].surface = wl_compositor_create_surface(g->wl_compositor);
 	}
-	w->wl_pointer = (g->seat_capabilities & WL_SEAT_CAPABILITY_POINTER)
-		? wl_seat_get_pointer(g->wl_seat) : nil;
-	w->wl_keyboard = (g->seat_capabilities & WL_SEAT_CAPABILITY_KEYBOARD)
-		? wl_seat_get_keyboard(g->wl_seat) : nil;
+	w->wl_pointer = wl_seat_get_pointer(g->wl_seat);
+	w->wl_keyboard = wl_seat_get_keyboard(g->wl_seat);
 	w->cursor.surface = wl_compositor_create_surface(g->wl_compositor);
 	fd = allocate_shm_file(curBufSz);
 	w->cursor.pool = wl_shm_create_pool(w->global->wl_shm, fd, curBufSz);
@@ -972,10 +975,8 @@ rpc_attach(Client *client, char *label, char *winsize)
 	w = setupwindow(client, g);
 	if (w == nil)
 		sysfatal("unable to allocate new window");
-	if (w->wl_pointer != nil)
-		wl_pointer_add_listener(w->wl_pointer, &wl_pointer_listener, client);
-	if (w->wl_keyboard != nil)
-		wl_keyboard_add_listener(w->wl_keyboard, &wl_keyboard_listener, client);
+	wl_pointer_add_listener(w->wl_pointer, &wl_pointer_listener, client);
+	wl_keyboard_add_listener(w->wl_keyboard, &wl_keyboard_listener, client);
 	syncpoint(w->global->wl_display);
 	if (w->cursize.x != 0 && w->cursize.y != 0)
 		// May have had bounds suggested by callbacks run during the syncpoint.
