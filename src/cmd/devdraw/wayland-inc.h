@@ -76,6 +76,7 @@ typedef struct window {
 	} decoration;
 	struct bounds bounds, cursize, wantsize;
 	int scale;
+	int configured;
 	int resizing;
 	// Mouse members: x, y, button state, time and entry serial.
 	struct mouse {

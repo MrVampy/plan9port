@@ -255,6 +255,13 @@ xdg_surface_configure(void *opaque, struct xdg_surface *s, uint32_t serial)
 		goto Done;
 
 	r = Rect(0, 0, w->wantsize.x, w->wantsize.y);
+	// The initial configure can arrive before Tinit has installed image 0.
+	// Record the compositor size; rpc_attach will allocate the first image.
+	if (c->screenimage == nil) {
+		w->cursize.x = w->wantsize.x;
+		w->cursize.y = w->wantsize.y;
+		goto Done;
+	}
 	new = allocmemimage(r, strtochan("x8r8g8b8"));
 	if (new == nil)
 		sysfatal("%r");
@@ -266,6 +273,7 @@ xdg_surface_configure(void *opaque, struct xdg_surface *s, uint32_t serial)
 	w->cursize.y = w->wantsize.y;
 Done:
 	xdg_surface_ack_configure(w->xdg_surface, serial);
+	w->configured = 1;
 }
 
 static void
@@ -968,7 +976,10 @@ rpc_attach(Client *client, char *label, char *winsize)
 		sysfatal("unable to allocate new window");
 	wl_pointer_add_listener(w->wl_pointer, &wl_pointer_listener, client);
 	wl_keyboard_add_listener(w->wl_keyboard, &wl_keyboard_listener, client);
-	syncpoint(w->global->wl_display);
+	// Wait for the initial xdg configure so the first screen image matches
+	// the compositor-assigned tile instead of racing ahead with 800x600.
+	while (w->configured == 0)
+		syncpoint(w->global->wl_display);
 	if (w->cursize.x != 0 && w->cursize.y != 0)
 		// May have had bounds suggested by callbacks run during the syncpoint.
 		r = Rect(0, 0, w->cursize.x, w->cursize.y);
