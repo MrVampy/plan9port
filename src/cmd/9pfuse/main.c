@@ -61,6 +61,7 @@
 
 int debug;
 char *aname = "";
+char *uname;
 void fusedispatch(void*);
 Channel *fusechan;
 
@@ -85,12 +86,12 @@ double entrytimeout = 1.0;
 
 CFsys *fsys;
 CFid *fsysroot;
-void init9p(char*, char*);
+void init9p(char*, char*, char*);
 
 void
 usage(void)
 {
-	fprint(2, "usage: 9pfuse [-D] [-A attrtimeout] [-a aname] address mtpt\n");
+	fprint(2, "usage: 9pfuse [-D] [-A attrtimeout] [-a aname] [-u uname] address mtpt\n");
 	exit(1);
 }
 
@@ -117,6 +118,9 @@ threadmain(int argc, char **argv)
 	case 'a':
 		aname = EARGF(usage());
 		break;
+	case 'u':
+		uname = EARGF(usage());
+		break;
 	default:
 		usage();
 	}ARGEND
@@ -131,7 +135,7 @@ threadmain(int argc, char **argv)
 
 	setsid();	/* won't be able to use console, but can't be interrupted */
 
-	init9p(argv[0], aname);
+	init9p(argv[0], aname, uname);
 	initfuse(argv[1]);
 
 	fusechan = chancreate(sizeof(void*), 0);
@@ -160,9 +164,10 @@ fusereader(void *v)
 }
 
 void
-init9p(char *addr, char *spec)
+init9p(char *addr, char *spec, char *user)
 {
 	int fd;
+	CFid *fid;
 
 	if(strcmp(addr, "-") == 0)
 		fd = 0;
@@ -170,8 +175,16 @@ init9p(char *addr, char *spec)
 		if((fd = dial(netmkaddr(addr, "tcp", "564"), nil, nil, nil)) < 0)
 			sysfatal("dial %s: %r", addr);
 	proccreate(watchfd, (void*)(uintptr)fd, STACK);
-	if((fsys = fsmount(fd, spec)) == nil)
-		sysfatal("fsmount: %r");
+	if(user == nil)
+		user = getuser();
+	if((fsys = fsinit(fd)) == nil)
+		sysfatal("fsinit: %r");
+	if((fid = fsattach(fsys, nil, user, spec)) == nil){
+		_fsunmount(fsys);
+		fsys = nil;
+		sysfatal("fsattach: %r");
+	}
+	fssetroot(fsys, fid);
 	fsysroot = fsroot(fsys);
 }
 
