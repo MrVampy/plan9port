@@ -332,7 +332,8 @@ nodeid2fid(uvlong nodeid)
 uvlong
 qid2inode(Qid q)
 {
-	return q.path | ((uvlong)q.type<<56);
+	/* Keep synthetic inode numbers below Linux's signed stat boundary. */
+	return (q.path & (((uvlong)1<<55)-1)) | ((uvlong)q.type<<55);
 }
 
 void
