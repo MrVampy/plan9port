@@ -336,6 +336,32 @@ qid2inode(Qid q)
 	return (q.path & (((uvlong)1<<55)-1)) | ((uvlong)q.type<<55);
 }
 
+int
+sameqid(Qid a, Qid b)
+{
+	return a.path == b.path && a.vers == b.vers && a.type == b.type;
+}
+
+void
+refreshnodeids(Qid q, CFid *dirfid, char *name)
+{
+	Fusefid *ff;
+	CFid *newfid;
+	int i;
+
+	for(i=0; i<nfusefid; i++){
+		ff = fusefid[i];
+		if(ff == nil || ff->isnodeid != 1 || ff->fid == nil)
+			continue;
+		if(!sameqid(fsqid(ff->fid), q))
+			continue;
+		if((newfid = fswalk(dirfid, name)) == nil)
+			continue;
+		fsclose(ff->fid);
+		ff->fid = newfid;
+	}
+}
+
 void
 dir2attr(Dir *d, struct fuse_attr *attr)
 {
@@ -1124,8 +1150,10 @@ fuserename(FuseMsg *m)
 {
 	struct fuse_rename_in *in;
 	char *before, *after;
-	CFid *fid, *newfid;
+	CFid *fid, *newfid, *oldfid;
 	Dir d;
+	Qid sourceqid;
+	int err, sourceisdir;
 
 	in = m->tx;
 	if(in->newdir != m->hdr->nodeid){
@@ -1146,13 +1174,50 @@ fuserename(FuseMsg *m)
 		replyfuseerrstr(m);
 		return;
 	}
+	sourceqid = fsqid(newfid);
 	nulldir(&d);
 	d.name = after;
 	if(fsdirfwstat(newfid, &d) < 0){
-		replyfuseerrstr(m);
-		fsclose(newfid);
-		return;
+		err = errstr2errno();
+		if((err != EEXIST && err != EBUSY) || strcmp(before, after) == 0){
+			replyfuseerrno(m, err);
+			fsclose(newfid);
+			return;
+		}
+
+		/*
+		 * 9P Twstat rename does not replace an existing name, but
+		 * Linux rename(2) does.  Emulate the common file-over-file
+		 * case so editor temp-file saves work through FUSE.  Directory
+		 * replacement is deliberately left to real 9P semantics.
+		 */
+		if((oldfid = fswalk(fid, after)) == nil){
+			if(fsdirfwstat(newfid, &d) == 0)
+				goto Renamed;
+			replyfuseerrno(m, err);
+			fsclose(newfid);
+			return;
+		}
+		sourceisdir = (fsqid(newfid).type&QTDIR) != 0;
+		if(sourceisdir || (fsqid(oldfid).type&QTDIR)){
+			fsclose(oldfid);
+			replyfuseerrno(m, sourceisdir ? EEXIST : EISDIR);
+			fsclose(newfid);
+			return;
+		}
+		if(fsfremove(oldfid) < 0){
+			replyfuseerrstr(m);
+			fsclose(newfid);
+			return;
+		}
+		if(fsdirfwstat(newfid, &d) < 0){
+			replyfuseerrstr(m);
+			fsclose(newfid);
+			return;
+		}
 	}
+Renamed:
+	refreshnodeids(sourceqid, fid, after);
 	fsclose(newfid);
 	replyfuse(m, nil, 0);
 }
