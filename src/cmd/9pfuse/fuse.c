@@ -7,6 +7,11 @@ int fusemaxwrite;
 FuseMsg *fusemsglist;
 Lock fusemsglock;
 
+enum
+{
+	FuseMaxWrite = 1024*1024
+};
+
 int mountfuse(char *mtpt);
 void unmountfuse(char *mtpt);
 
@@ -289,10 +294,11 @@ initfuse(char *mtpt)
 	fusemtpt = mtpt;
 
 	/*
-	 * The 4096 is for the message headers.
-	 * It's a lot, but it's what the FUSE libraries ask for.
+	 * Linux requires enough room for a FUSE request header, the
+	 * write request body, and the negotiated max_write payload.
+	 * lib9pclient splits the payload again at the negotiated 9P msize.
 	 */
-	fusemaxwrite = getpagesize();
+	fusemaxwrite = FuseMaxWrite;
 	fusebufsize = 4096 + fusemaxwrite;
 
 	if((fusefd = mountfuse(mtpt)) < 0)
@@ -320,6 +326,7 @@ initfuse(char *mtpt)
 	memset(&rx, 0, sizeof rx);
 	rx.major = FUSE_KERNEL_VERSION;
 	rx.minor = FUSE_KERNEL_MINOR_VERSION;
+	rx.flags = FUSE_BIG_WRITES;
 	rx.max_write = fusemaxwrite;
 	replyfuse(m, &rx, sizeof rx);
 }

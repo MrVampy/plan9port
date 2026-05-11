@@ -141,6 +141,7 @@ struct fuse_file_lock {
  */
 #define FUSE_ASYNC_READ		(1 << 0)
 #define FUSE_POSIX_LOCKS	(1 << 1)
+#define FUSE_BIG_WRITES		(1 << 5)
 #if (__FreeBSD__ >= 10)
 #define FUSE_CASE_INSENSITIVE	(1 << 29)
 #define FUSE_VOL_RENAME		(1 << 30)
