@@ -535,15 +535,22 @@ fusesetattr(FuseMsg *m)
 		 * Synthetic file servers (e.g., plumber) honor
 		 * open(OTRUNC) but not wstat.
 		 */
-		if(in->valid == FATTR_SIZE && in->size == 0){
+		if((in->valid&FATTR_SIZE) && in->size == 0){
 			if((nfid = fswalk(fid, nil)) == nil){
 				replyfuseerrstr(m);
 				return;
 			}
 			if(fsfopen(nfid, OWRITE|OTRUNC) < 0){
-				replyfuseerrstr(m);
 				fsclose(nfid);
-				return;
+				if((nfid = fswalk(fid, nil)) == nil){
+					replyfuseerrstr(m);
+					return;
+				}
+				if(fsfopen(nfid, OWRITE) < 0){
+					replyfuseerrstr(m);
+					fsclose(nfid);
+					return;
+				}
 			}
 			fsclose(nfid);
 			goto stat;
@@ -667,8 +674,12 @@ _fuseopen(FuseMsg *m, int isdir)
 		return;
 	}
 	if((fid = _fuseopenfid(m->hdr->nodeid, isdir, openmode, &err)) == nil){
-		replyfuseerrno(m, err);
-		return;
+		if(openmode&OTRUNC)
+			fid = _fuseopenfid(m->hdr->nodeid, isdir, openmode&~OTRUNC, &err);
+		if(fid == nil){
+			replyfuseerrno(m, err);
+			return;
+		}
 	}
 	out.fh = allocfh(fid);
 	out.open_flags = FOPEN_DIRECT_IO;	/* no page cache */
