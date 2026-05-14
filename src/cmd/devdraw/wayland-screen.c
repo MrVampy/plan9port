@@ -318,10 +318,6 @@ xdg_toplevel_configure(void *opaque, struct xdg_toplevel *t, int32_t wd, int32_t
 static void
 xdg_toplevel_close(void *opaque, struct xdg_toplevel *t)
 {
-	Globals *g;
-
-	g = opaque;
-	wl_display_disconnect(g->wl_display);
 	threadexitsall(nil);
 }
 
